@@ -86,7 +86,7 @@
      */
     function handleOutsideClick(event) {
         if (navMenu && navMenu.classList.contains('active')) {
-            if (!navMenu.contains(event.target) && !navToggle.contains(event.target)) {
+            if (navToggle && !navMenu.contains(event.target) && !navToggle.contains(event.target)) {
                 navMenu.classList.remove('active');
                 navToggle.setAttribute('aria-expanded', 'false');
             }
