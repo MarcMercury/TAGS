@@ -18,26 +18,126 @@ export default async function Home() {
   // 3. Get previous episodes for archive (exclude latest)
   const previousEpisodes = allEpisodes?.slice(1) || [];
 
-  // If no episode is found, show a "Coming Soon" state
+  // If no episode is found, show the full branded "Coming Soon" experience
   if (!latestEpisode) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-800 font-serif relative">
-        {/* Minimal Nav for Coming Soon */}
-        <nav className="fixed top-0 left-0 right-0 z-50 bg-stone-50/80 backdrop-blur-md border-b border-stone-200">
+      <main className="min-h-screen bg-stone-50 text-stone-900 font-sans">
+        
+        {/* ===== STICKY NAVIGATION BAR ===== */}
+        <nav className="fixed top-0 left-0 right-0 z-50 bg-stone-50/80 backdrop-blur-md border-b border-stone-200/50 shadow-sm">
           <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
-            <span className="text-xl font-serif font-bold text-stone-900">
+            <Link href="/" className="text-xl font-serif font-bold text-stone-900 hover:opacity-80 transition-opacity">
               Stoop<span className="text-orange-600">Politics</span>
-            </span>
-            <Link href="/login" className="text-stone-500 hover:text-stone-900 transition-colors">
+            </Link>
+            <Link 
+              href="/login" 
+              className="text-stone-400 hover:text-stone-900 transition-colors"
+              title="Admin Login"
+            >
               <User size={20} />
             </Link>
           </div>
         </nav>
-        <div className="text-center p-8">
-          <h1 className="text-5xl font-serif font-bold mb-4">Stoop Politics</h1>
-          <p className="text-xl text-stone-600">Our first broadcast is coming soon to the stoop.</p>
+        
+        {/* Spacer for fixed nav */}
+        <div className="h-16"></div>
+
+        {/* ===== HERO BANNER - JESSIE MERCURY ===== */}
+        <div className="relative w-full bg-gradient-to-r from-stone-900 via-stone-800 to-orange-900 overflow-hidden">
+          {/* Animated background pattern */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute inset-0" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.4\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }}></div>
+          </div>
+          
+          <div className="max-w-5xl mx-auto px-6 py-6 relative">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-orange-400 text-sm font-bold uppercase tracking-widest mb-1">🎙️ The Digital Stoop</p>
+                <h1 className="text-3xl md:text-4xl font-serif font-black text-white">
+                  Jessie Mercury
+                </h1>
+                <p className="text-stone-400 text-sm mt-1">Dishing NYC news, one stoop at a time</p>
+              </div>
+              <div className="hidden md:block text-6xl">🗽</div>
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* ===== HERO IMAGE - NYC STOOP VIBES ===== */}
+        <header className="relative max-w-5xl mx-auto px-6 pt-8 pb-8">
+          
+          {/* Main Hero Image - Iconic NYC Stoop Scene */}
+          <div className="relative w-full aspect-[21/9] rounded-2xl overflow-hidden shadow-2xl mb-10 bg-stone-800 group cursor-pointer">
+            <img 
+              src="https://images.unsplash.com/photo-1555529771-7888783a18d3?q=80&w=2000&auto=format&fit=crop"
+              alt="NYC Stoop Scene"
+              className="object-cover w-full h-full grayscale-[30%] group-hover:grayscale-0 transition-all duration-700 ease-out scale-100 group-hover:scale-105"
+            />
+            
+            {/* Gradient overlays for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-stone-900/90 via-stone-900/30 to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-r from-stone-900/50 to-transparent"></div>
+            
+            {/* Decorative NYC elements */}
+            <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+              <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+              Live from Brooklyn
+            </div>
+            
+            {/* Coming Soon Overlay */}
+            <div className="absolute bottom-6 left-6 right-6">
+              <div className="inline-flex items-center gap-2 bg-stone-700 text-white text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wider mb-3 shadow-lg">
+                <span className="w-2 h-2 bg-orange-400 rounded-full"></span>
+                Coming Soon
+              </div>
+              <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-white drop-shadow-lg mb-2">
+                First Episode Dropping Soon
+              </h2>
+              <p className="text-stone-300 text-sm">
+                Stay tuned for hot takes from the stoop
+              </p>
+            </div>
+          </div>
+
+          {/* Welcome Card */}
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-stone-200 mb-6 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-orange-500 to-orange-600"></div>
+            <p className="text-lg text-stone-700 leading-relaxed pl-4 italic">
+              "Welcome to Stoop Politics — where we break down the news that matters to New Yorkers, straight from the stoop. No studio, no script, just real talk."
+            </p>
+            <p className="text-sm text-stone-500 pl-4 mt-3 font-medium">— Jessie Mercury</p>
+          </div>
+
+          {/* What to Expect Section */}
+          <div className="grid md:grid-cols-3 gap-6 mt-8">
+            <div className="bg-stone-100 rounded-xl p-5 text-center">
+              <div className="text-3xl mb-3">🏙️</div>
+              <h3 className="font-bold text-stone-800 mb-2">NYC News</h3>
+              <p className="text-sm text-stone-600">Local stories that affect your block, your borough, your city.</p>
+            </div>
+            <div className="bg-stone-100 rounded-xl p-5 text-center">
+              <div className="text-3xl mb-3">🗣️</div>
+              <h3 className="font-bold text-stone-800 mb-2">Real Talk</h3>
+              <p className="text-sm text-stone-600">Unfiltered opinions from the neighborhood. No corporate spin.</p>
+            </div>
+            <div className="bg-stone-100 rounded-xl p-5 text-center">
+              <div className="text-3xl mb-3">📚</div>
+              <h3 className="font-bold text-stone-800 mb-2">Receipts</h3>
+              <p className="text-sm text-stone-600">Every claim backed up with links. Click to verify.</p>
+            </div>
+          </div>
+        </header>
+
+        {/* ===== FOOTER ===== */}
+        <footer className="border-t border-stone-200 bg-stone-100 mt-16">
+          <div className="max-w-5xl mx-auto px-6 py-8 text-center">
+            <p className="text-sm text-stone-500">
+              &copy; {new Date().getFullYear()} Stoop Politics. All rights reserved.
+            </p>
+          </div>
+        </footer>
+
+      </main>
     );
   }
 
