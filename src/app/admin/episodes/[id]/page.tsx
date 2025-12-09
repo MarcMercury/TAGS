@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, ExternalLink, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Play, Pause, Link as LinkIcon, Check, Loader2, Wand2 } from 'lucide-react';
 
 export default function TranscriptEditor({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -11,16 +11,18 @@ export default function TranscriptEditor({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true);
   const [episode, setEpisode] = useState<any>(null);
   const [nodes, setNodes] = useState<any[]>([]);
-  const [playingNode, setPlayingNode] = useState<number | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playingNode, setPlayingNode] = useState<string | null>(null);
 
   // Load Data
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Get Episode Details
       const { data: ep } = await supabase.from('episodes').select('*').eq('id', resolvedParams.id).single();
       setEpisode(ep);
 
-      // 2. Get Transcript Nodes
       const { data: transcript } = await supabase
         .from('transcript_nodes')
         .select('*')
@@ -33,103 +35,227 @@ export default function TranscriptEditor({ params }: { params: Promise<{ id: str
     fetchData();
   }, [resolvedParams.id]);
 
-  // Save Changes (Updates specific node)
-  const updateNode = async (nodeId: number, field: string, value: any) => {
-    // Optimistic Update (Update UI immediately)
-    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, [field]: value } : n));
-
-    // Send to DB
-    await supabase.from('transcript_nodes').update({ [field]: value }).eq('id', nodeId);
+  // Auto-save on blur
+  const handleBlur = async (nodeId: string, field: string, value: any) => {
+    setSaving(nodeId);
+    
+    const { error } = await supabase
+      .from('transcript_nodes')
+      .update({ [field]: value })
+      .eq('id', nodeId);
+    
+    if (!error) {
+      setSaved(nodeId);
+      setTimeout(() => setSaved(null), 2000);
+    }
+    setSaving(null);
   };
 
-  // Publish Button
+  // Update local state on change
+  const updateNodeLocal = (nodeId: string, field: string, value: any) => {
+    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, [field]: value } : n));
+  };
+
+  // Play audio at timestamp
+  const playFromTime = (startTime: number, nodeId: string) => {
+    if (audioRef.current && episode?.audio_url) {
+      audioRef.current.currentTime = startTime;
+      audioRef.current.play();
+      setPlayingNode(nodeId);
+    }
+  };
+
+  const pauseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setPlayingNode(null);
+    }
+  };
+
+  // Publish Episode
   const handlePublish = async () => {
+    setPublishing(true);
     const { error } = await supabase
       .from('episodes')
-      .update({ is_published: true, published_at: new Date() })
+      .update({ is_published: true, published_at: new Date().toISOString() })
       .eq('id', resolvedParams.id);
     
-    if (!error) router.push('/admin');
+    if (!error) {
+      router.push('/admin');
+    } else {
+      alert('Error publishing: ' + error.message);
+      setPublishing(false);
+    }
   };
 
-  if (loading) return <div className="p-10">Loading Studio...</div>;
+  // Format time as MM:SS
+  const formatTime = (seconds: number) => {
+    if (!seconds) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return mins + ':' + secs.toString().padStart(2, '0');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <Loader2 className="animate-spin text-stone-400" size={32} />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-stone-50 p-6 pb-32 font-sans">
+    <div className="min-h-screen bg-stone-50 font-sans">
       
-      {/* HEADER */}
-      <div className="max-w-4xl mx-auto flex justify-between items-center mb-8 sticky top-0 bg-stone-50/95 backdrop-blur z-20 py-4 border-b border-stone-200">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/admin')} className="p-2 hover:bg-stone-200 rounded-full">
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="font-bold text-stone-900 text-lg">{episode?.title}</h1>
-            <p className="text-xs text-stone-500 uppercase tracking-widest">Transcript Editor</p>
+      {/* Hidden Audio Element */}
+      {episode?.audio_url && (
+        <audio ref={audioRef} src={episode.audio_url} onEnded={() => setPlayingNode(null)} />
+      )}
+      
+      {/* STICKY HEADER */}
+      <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-sm">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => router.push('/admin')} 
+              className="p-2 hover:bg-stone-100 rounded-full transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="font-bold text-stone-900">{episode?.title}</h1>
+              <p className="text-xs text-stone-500 uppercase tracking-widest flex items-center gap-2">
+                Transcript Editor
+                {episode?.is_published && (
+                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-semibold">Live</span>
+                )}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-           <button 
-            onClick={handlePublish}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-green-700 transition-colors shadow-lg flex items-center gap-2"
-          >
-            <ExternalLink size={18} /> Publish Live
-          </button>
+          <div className="flex items-center gap-3">
+            {!episode?.is_published && (
+              <button 
+                onClick={handlePublish}
+                disabled={publishing}
+                className="bg-green-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-green-700 transition-colors shadow-lg flex items-center gap-2 disabled:opacity-50"
+              >
+                {publishing ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <ExternalLink size={18} />
+                )}
+                Publish Live
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* EDITOR GRID */}
-      <div className="max-w-3xl mx-auto space-y-4">
+      {/* MINI AUDIO PLAYER */}
+      {episode?.audio_url && (
+        <div className="sticky top-[73px] z-40 bg-stone-100 border-b border-stone-200">
+          <div className="max-w-4xl mx-auto px-6 py-3">
+            <audio controls className="w-full h-10" style={{ accentColor: '#ea580c' }}>
+              <source src={episode.audio_url} type="audio/webm" />
+            </audio>
+          </div>
+        </div>
+      )}
+
+      {/* EDITOR */}
+      <div className="max-w-3xl mx-auto px-6 py-8 pb-32">
+        
+        {/* Instructions */}
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-8">
+          <p className="text-sm text-orange-800">
+            <strong>Tip:</strong> Edit the transcript text and add reference links. Changes auto-save when you click away. 
+            Linked segments will appear highlighted on the public page.
+          </p>
+        </div>
+
         {nodes.length === 0 ? (
-          <div className="text-center p-12 border-2 border-dashed border-stone-300 rounded-xl text-stone-400">
-            No transcript found. Did you generate it in the recording step?
+          <div className="text-center p-16 border-2 border-dashed border-stone-300 rounded-xl">
+            <Wand2 className="mx-auto mb-4 text-stone-300" size={48} />
+            <p className="text-stone-500 mb-2">No transcript found.</p>
+            <p className="text-sm text-stone-400">Go back to the dashboard and click the wand icon to generate one.</p>
           </div>
         ) : (
-          nodes.map((node) => (
-            <div 
-              key={node.id} 
-              className={`group relative bg-white p-4 rounded-xl border transition-all duration-200 ${
-                node.reference_link ? 'border-blue-500 shadow-md ring-1 ring-blue-100' : 'border-stone-200 hover:border-stone-400'
-              }`}
-            >
-              <div className="flex gap-4 items-start">
+          <div className="space-y-4">
+            {nodes.map((node, index) => (
+              <div 
+                key={node.id} 
+                className={'group relative bg-white rounded-xl border-2 transition-all duration-200 overflow-hidden ' + 
+                  (node.reference_link 
+                    ? 'border-orange-400 shadow-md ring-2 ring-orange-100' 
+                    : 'border-stone-200 hover:border-stone-300')
+                }
+              >
+                {/* Linked Indicator Bar */}
+                {node.reference_link && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-orange-600"></div>
+                )}
                 
-                {/* Timecode & Play */}
-                <div className="w-16 shrink-0 pt-1">
-                  <span className="text-xs font-mono text-stone-400 block mb-1">
-                    {Math.floor(node.start_time || 0)}s
-                  </span>
-                  <button className="text-stone-300 hover:text-stone-900">
-                    <Play size={14} fill="currentColor" />
-                  </button>
-                </div>
+                <div className="p-4">
+                  <div className="flex gap-4">
+                    
+                    {/* Timecode & Play Button */}
+                    <div className="w-16 shrink-0 text-center">
+                      <span className="text-xs font-mono text-stone-400 block mb-2">
+                        {formatTime(node.start_time)}
+                      </span>
+                      <button 
+                        onClick={() => playingNode === node.id ? pauseAudio() : playFromTime(node.start_time || 0, node.id)}
+                        className={'w-8 h-8 rounded-full flex items-center justify-center mx-auto transition-colors ' +
+                          (playingNode === node.id 
+                            ? 'bg-orange-500 text-white' 
+                            : 'bg-stone-100 text-stone-500 hover:bg-stone-200')
+                        }
+                      >
+                        {playingNode === node.id ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                      </button>
+                    </div>
 
-                {/* Content Editor */}
-                <div className="grow space-y-3">
-                  {/* The Text Itself */}
-                  <textarea
-                    value={node.content}
-                    onChange={(e) => updateNode(node.id, 'content', e.target.value)}
-                    className="w-full text-lg text-stone-800 font-serif bg-transparent border-none focus:ring-0 p-0 resize-none"
-                    rows={Math.ceil(node.content.length / 60)}
-                  />
+                    {/* Content */}
+                    <div className="grow space-y-3">
+                      {/* Editable Text */}
+                      <textarea
+                        value={node.content}
+                        onChange={(e) => updateNodeLocal(node.id, 'content', e.target.value)}
+                        onBlur={(e) => handleBlur(node.id, 'content', e.target.value)}
+                        className="w-full text-lg text-stone-800 leading-relaxed bg-transparent border-none focus:ring-0 p-0 resize-none outline-none"
+                        rows={Math.max(2, Math.ceil(node.content.length / 70))}
+                      />
 
-                  {/* The Link Adder */}
-                  <div className="flex items-center gap-2 pt-2 border-t border-stone-50">
-                    <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Reference Link:</span>
-                    <input 
-                      type="text" 
-                      placeholder="Paste URL here (e.g. https://nytimes.com/...)"
-                      value={node.reference_link || ''}
-                      onChange={(e) => updateNode(node.id, 'reference_link', e.target.value)}
-                      className="grow text-sm bg-stone-50 border border-stone-200 rounded px-2 py-1 text-blue-600 focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
+                      {/* Reference Link Input */}
+                      <div className="flex items-center gap-2 pt-3 border-t border-stone-100">
+                        <LinkIcon size={14} className="text-stone-400 shrink-0" />
+                        <input 
+                          type="url" 
+                          placeholder="Add reference URL (e.g. https://nytimes.com/article...)"
+                          value={node.reference_link || ''}
+                          onChange={(e) => updateNodeLocal(node.id, 'reference_link', e.target.value)}
+                          onBlur={(e) => handleBlur(node.id, 'reference_link', e.target.value)}
+                          className={'grow text-sm border rounded-lg px-3 py-2 outline-none transition-all ' +
+                            (node.reference_link 
+                              ? 'bg-orange-50 border-orange-200 text-orange-700' 
+                              : 'bg-stone-50 border-stone-200 text-stone-600 focus:border-orange-400 focus:ring-2 focus:ring-orange-100')
+                          }
+                        />
+                        {/* Save Indicator */}
+                        {saving === node.id && (
+                          <Loader2 size={16} className="animate-spin text-stone-400" />
+                        )}
+                        {saved === node.id && (
+                          <Check size={16} className="text-green-500" />
+                        )}
+                      </div>
+                    </div>
+
                   </div>
                 </div>
-
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
