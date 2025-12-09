@@ -106,17 +106,48 @@ export default async function Home() {
       {/* Spacer for fixed nav */}
       <div className="h-16"></div>
 
-      {/* ===== HERO SECTION ===== */}
+      {/* ===== HERO BANNER - JESSIE MERCURY ===== */}
+      <div className="relative w-full bg-gradient-to-r from-stone-900 via-stone-800 to-orange-900 overflow-hidden">
+        {/* Animated background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23ffffff" fill-opacity="0.4"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }}></div>
+        </div>
+        
+        <div className="max-w-5xl mx-auto px-6 py-6 relative">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-orange-400 text-sm font-bold uppercase tracking-widest mb-1">🎙️ The Digital Stoop</p>
+              <h1 className="text-3xl md:text-4xl font-serif font-black text-white">
+                Jessie Mercury
+              </h1>
+              <p className="text-stone-400 text-sm mt-1">Dishing NYC news, one stoop at a time</p>
+            </div>
+            <div className="hidden md:block text-6xl">🗽</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== HERO IMAGE - NYC STOOP VIBES ===== */}
       <header className="relative max-w-5xl mx-auto px-6 pt-8 pb-8">
         
-        {/* Hero Image - Grayscale to Color on Hover */}
-        <div className="relative w-full aspect-[21/9] rounded-2xl overflow-hidden shadow-2xl mb-10 bg-stone-300 group cursor-pointer">
+        {/* Main Hero Image - Iconic NYC Stoop Scene */}
+        <div className="relative w-full aspect-[21/9] rounded-2xl overflow-hidden shadow-2xl mb-10 bg-stone-800 group cursor-pointer">
+          {/* Cover image - use episode cover or fallback to stoop image */}
           <img 
-            src="https://images.unsplash.com/photo-1574169208507-84376144848b?q=80&w=2079&auto=format&fit=crop" 
-            alt="Kids sitting on a New York City stoop"
-            className="object-cover w-full h-full grayscale group-hover:grayscale-0 transition-all duration-700 ease-out scale-100 group-hover:scale-105"
+            src={latestEpisode.cover_image_url || "https://images.unsplash.com/photo-1555529771-7888783a18d3?q=80&w=2000&auto=format&fit=crop"}
+            alt="NYC Stoop Scene"
+            className="object-cover w-full h-full grayscale-[30%] group-hover:grayscale-0 transition-all duration-700 ease-out scale-100 group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-stone-900/70 via-stone-900/20 to-transparent"></div>
+          
+          {/* Gradient overlays for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-stone-900/90 via-stone-900/30 to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-stone-900/50 to-transparent"></div>
+          
+          {/* Decorative NYC elements */}
+          <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+            Live from Brooklyn
+          </div>
           
           {/* Episode Badge & Title Overlay */}
           <div className="absolute bottom-6 left-6 right-6">
@@ -124,28 +155,24 @@ export default async function Home() {
               <span className="animate-pulse w-2 h-2 bg-white rounded-full"></span>
               Latest Broadcast
             </div>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-white drop-shadow-lg">
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-white drop-shadow-lg mb-2">
               {latestEpisode.title}
             </h2>
+            <p className="text-stone-300 text-sm">
+              {new Date(latestEpisode.published_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            </p>
           </div>
         </div>
 
-        {/* Podcast Title & Host Byline */}
-        <div className="border-b-2 border-stone-200 pb-8">
-          <h1 className="text-5xl md:text-6xl font-serif font-black text-stone-900 mb-3 tracking-tight">
-            Stoop Politics
-          </h1>
-          <div className="flex items-center gap-3 text-lg font-medium text-stone-500 mb-6">
-            <span>with <span className="text-stone-900 font-bold">Jessie Mercury</span></span>
-            <span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span>
-            <span className="uppercase text-sm tracking-widest">New York City</span>
-          </div>
-          {latestEpisode.summary && (
-            <p className="text-xl text-stone-600 leading-relaxed max-w-3xl">
-              {latestEpisode.summary}
+        {/* Summary Card */}
+        {latestEpisode.summary && (
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-stone-200 mb-6 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-orange-500 to-orange-600"></div>
+            <p className="text-lg text-stone-700 leading-relaxed pl-4 italic">
+              "{latestEpisode.summary}"
             </p>
-          )}
-        </div>
+          </div>
+        )}
       </header>
 
       {/* ===== STICKY AUDIO PLAYER ===== */}

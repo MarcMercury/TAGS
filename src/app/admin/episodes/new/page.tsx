@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
-  Mic, Square, Wand2, Save, ArrowLeft, Scissors 
+  Mic, Square, Wand2, Save, ArrowLeft, Scissors, ImagePlus, X 
 } from 'lucide-react';
 
 export default function CreateEpisode() {
@@ -21,6 +21,10 @@ export default function CreateEpisode() {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [uploading, setUploading] = useState(false);
+  
+  // Cover art state
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,6 +91,21 @@ export default function CreateEpisode() {
     setRecordingTime(0);
   };
 
+  const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setCoverPreview(previewUrl);
+    }
+  };
+
+  const removeCover = () => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(null);
+    setCoverPreview(null);
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -101,23 +120,43 @@ export default function CreateEpisode() {
     setUploading(true);
 
     try {
-      const filename = 'episode-' + Date.now() + '.webm';
+      // Upload audio file
+      const audioFilename = 'episode-' + Date.now() + '.webm';
       const { error: uploadError } = await supabase.storage
         .from('media')
-        .upload('audio/' + filename, audioBlob);
+        .upload('audio/' + audioFilename, audioBlob);
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
+      const { data: { publicUrl: audioPublicUrl } } = supabase.storage
         .from('media')
-        .getPublicUrl('audio/' + filename);
+        .getPublicUrl('audio/' + audioFilename);
+
+      // Upload cover art if provided
+      let coverImageUrl = null;
+      if (coverFile) {
+        const coverFilename = 'cover-' + Date.now() + '.' + coverFile.name.split('.').pop();
+        const { error: coverError } = await supabase.storage
+          .from('media')
+          .upload('covers/' + coverFilename, coverFile);
+        
+        if (coverError) {
+          console.error('Cover upload failed:', coverError);
+        } else {
+          const { data: { publicUrl } } = supabase.storage
+            .from('media')
+            .getPublicUrl('covers/' + coverFilename);
+          coverImageUrl = publicUrl;
+        }
+      }
 
       const { data: episode, error: dbError } = await supabase
         .from('episodes')
         .insert({
           title,
           summary,
-          audio_url: publicUrl,
+          audio_url: audioPublicUrl,
+          cover_image_url: coverImageUrl,
           duration_seconds: recordingTime,
           is_published: false,
           published_at: null,
@@ -291,6 +330,45 @@ export default function CreateEpisode() {
                     rows={4}
                     className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none transition-all"
                   />
+                </div>
+
+                {/* Cover Art Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-stone-600 mb-2">
+                    <ImagePlus size={14} className="inline mr-1" /> Cover Art
+                  </label>
+                  
+                  {coverPreview ? (
+                    <div className="relative w-full aspect-video rounded-xl overflow-hidden border-2 border-stone-200 group">
+                      <img 
+                        src={coverPreview} 
+                        alt="Cover preview" 
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeCover}
+                        className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      >
+                        <X size={16} />
+                      </button>
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                        <p className="text-white text-xs truncate">{coverFile?.name}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center w-full aspect-video border-2 border-dashed border-stone-300 rounded-xl cursor-pointer hover:border-orange-500 hover:bg-orange-50/50 transition-all group">
+                      <ImagePlus size={32} className="text-stone-400 group-hover:text-orange-500 mb-2" />
+                      <span className="text-sm text-stone-500 group-hover:text-orange-600">Click to upload cover image</span>
+                      <span className="text-xs text-stone-400 mt-1">PNG, JPG up to 5MB</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCoverSelect}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
             </div>
