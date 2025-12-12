@@ -149,11 +149,14 @@ export default async function Home() {
   }
 
   // 4. Fetch the transcript for the latest episode
-  const { data: transcript } = await supabase
+  const { data: transcript, error: transcriptError } = await supabase
     .from('transcript_nodes')
     .select('*')
     .eq('episode_id', latestEpisode.id)
     .order('display_order', { ascending: true });
+
+  // Debug logging
+  console.log('Transcript fetch for episode:', latestEpisode.id, 'Nodes:', transcript?.length || 0, 'Error:', transcriptError?.message || 'none');
 
   return (
     <main className="min-h-screen bg-stone-50 text-stone-900 font-sans">
@@ -332,6 +335,60 @@ export default async function Home() {
           )}
         </div>
       </article>
+
+      {/* ===== PREVIOUS EPISODES ARCHIVE ===== */}
+      {previousEpisodes.length > 0 && (
+        <section className="max-w-5xl mx-auto px-6 pb-12">
+          <details className="group">
+            <summary className="flex items-center justify-between cursor-pointer list-none py-4 border-t border-stone-200">
+              <h3 className="text-sm font-bold uppercase tracking-widest text-stone-500 flex items-center gap-2">
+                <ChevronDown size={16} className="group-open:rotate-180 transition-transform" />
+                Previous Episodes ({previousEpisodes.length})
+              </h3>
+            </summary>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 pb-8">
+              {previousEpisodes.map((ep) => (
+                <div 
+                  key={ep.id}
+                  className="bg-white rounded-xl p-4 border border-stone-200 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start gap-4">
+                    {/* Episode Info */}
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-stone-900 text-sm line-clamp-1 mb-1">
+                        {ep.title}
+                      </h4>
+                      <p className="text-xs text-stone-400 mb-2">
+                        {new Date(ep.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {ep.duration_seconds && (
+                          <span className="ml-2">
+                            • {Math.floor(ep.duration_seconds / 60)}:{(ep.duration_seconds % 60).toString().padStart(2, '0')}
+                          </span>
+                        )}
+                      </p>
+                      {ep.summary && (
+                        <p className="text-xs text-stone-600 line-clamp-2">{ep.summary}</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Audio Player - Compact */}
+                  <audio 
+                    controls 
+                    className="w-full h-8 mt-3"
+                    style={{ accentColor: '#ea580c' }}
+                    preload="none"
+                  >
+                    <source src={ep.audio_url} type="audio/webm" />
+                    <source src={ep.audio_url} type="audio/mpeg" />
+                  </audio>
+                </div>
+              ))}
+            </div>
+          </details>
+        </section>
+      )}
 
       {/* ===== FOOTER ===== */}
       <footer className="border-t border-stone-200 bg-stone-100">
