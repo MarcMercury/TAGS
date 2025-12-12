@@ -2,14 +2,28 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Mic, List, Edit, ExternalLink, Clock, Trash2, Wand2, Loader2, CheckCircle } from 'lucide-react';
+import { Mic, List, Edit, ExternalLink, Clock, Trash2, Wand2, Loader2, CheckCircle, MessageSquare, Mail, MailOpen, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+
+interface InboxMessage {
+  id: number;
+  message: string;
+  created_at: string;
+  is_read: boolean;
+  admin_notes?: string;
+}
 
 export default function AdminDashboard() {
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [transcribing, setTranscribing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  
+  // Inbox state
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
+  const [expandedMessage, setExpandedMessage] = useState<number | null>(null);
+  const [deletingMessage, setDeletingMessage] = useState<number | null>(null);
 
   const fetchEpisodes = async () => {
     const { data } = await supabase
@@ -21,9 +35,42 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
+  const fetchMessages = async () => {
+    const { data } = await supabase
+      .from('inbox')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (data) setMessages(data);
+    setMessagesLoading(false);
+  };
+
   useEffect(() => {
     fetchEpisodes();
+    fetchMessages();
   }, []);
+
+  // Mark message as read
+  const markAsRead = async (id: number) => {
+    await supabase
+      .from('inbox')
+      .update({ is_read: true })
+      .eq('id', id);
+    
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
+  };
+
+  // Delete message
+  const deleteMessage = async (id: number) => {
+    setDeletingMessage(id);
+    await supabase
+      .from('inbox')
+      .delete()
+      .eq('id', id);
+    
+    setMessages(prev => prev.filter(m => m.id !== id));
+    setDeletingMessage(null);
+  };
 
   const formatDuration = (seconds: number) => {
     if (!seconds) return '--:--';
@@ -115,7 +162,7 @@ export default function AdminDashboard() {
       </div>
       
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
         <div className="bg-white rounded-xl border border-stone-200 p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-stone-100 rounded-lg flex items-center justify-center">
@@ -145,6 +192,130 @@ export default function AdminDashboard() {
           </div>
           <p className="text-4xl font-bold text-amber-600">{episodes.filter(e => !e.is_published).length}</p>
         </div>
+
+        <div className="bg-white rounded-xl border border-stone-200 p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <MessageSquare className="text-orange-600" size={20} />
+            </div>
+            <span className="text-sm font-medium text-stone-500">Messages</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <p className="text-4xl font-bold text-orange-600">{messages.filter(m => !m.is_read).length}</p>
+            <span className="text-sm text-stone-400">unread</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages Tile - Ask the Stoop Inbox */}
+      <div className="bg-white rounded-xl border border-stone-200 overflow-hidden shadow-sm mb-10">
+        <div className="px-6 py-4 border-b border-stone-200 bg-gradient-to-r from-orange-50 to-amber-50 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <MessageSquare className="text-orange-600" size={20} />
+            </div>
+            <div>
+              <h2 className="font-bold text-stone-900">Ask the Stoop</h2>
+              <p className="text-xs text-stone-500">Listener messages &amp; questions</p>
+            </div>
+          </div>
+          <span className="text-sm text-stone-400">{messages.length} total</span>
+        </div>
+        
+        {messagesLoading ? (
+          <div className="p-8 text-center text-stone-400">
+            <Loader2 className="animate-spin mx-auto mb-2" size={24} />
+            Loading messages...
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="p-8 text-center">
+            <Mail className="mx-auto mb-3 text-stone-300" size={40} />
+            <p className="text-stone-500">No messages yet.</p>
+            <p className="text-sm text-stone-400 mt-1">Listener questions will appear here.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-stone-100 max-h-96 overflow-y-auto">
+            {messages.map((msg) => (
+              <div 
+                key={msg.id}
+                className={`p-4 transition-colors ${!msg.is_read ? 'bg-orange-50/50' : 'hover:bg-stone-50'}`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Read/Unread indicator */}
+                  <div className="flex-shrink-0 mt-1">
+                    {msg.is_read ? (
+                      <MailOpen size={18} className="text-stone-400" />
+                    ) : (
+                      <Mail size={18} className="text-orange-500" />
+                    )}
+                  </div>
+                  
+                  {/* Message content */}
+                  <div className="flex-1 min-w-0">
+                    <div 
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setExpandedMessage(expandedMessage === msg.id ? null : msg.id);
+                        if (!msg.is_read) markAsRead(msg.id);
+                      }}
+                    >
+                      <p className={`text-sm ${expandedMessage === msg.id ? '' : 'line-clamp-2'} ${!msg.is_read ? 'font-medium text-stone-900' : 'text-stone-700'}`}>
+                        {msg.message}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-stone-400">
+                          {new Date(msg.created_at).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                        {expandedMessage !== msg.id && msg.message.length > 100 && (
+                          <button className="text-xs text-orange-500 hover:text-orange-600 flex items-center gap-0.5">
+                            <ChevronDown size={12} />
+                            more
+                          </button>
+                        )}
+                        {expandedMessage === msg.id && (
+                          <button className="text-xs text-stone-400 hover:text-stone-600 flex items-center gap-0.5">
+                            <ChevronUp size={12} />
+                            less
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex-shrink-0 flex items-center gap-1">
+                    {!msg.is_read && (
+                      <button
+                        onClick={() => markAsRead(msg.id)}
+                        className="p-1.5 text-stone-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Mark as read"
+                      >
+                        <CheckCircle size={16} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteMessage(msg.id)}
+                      disabled={deletingMessage === msg.id}
+                      className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      title="Delete message"
+                    >
+                      {deletingMessage === msg.id ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <X size={16} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Episode Table */}
