@@ -4,20 +4,29 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
-  Mic, Square, Wand2, Save, ArrowLeft, Scissors, ImagePlus, X 
+  Mic, Square, Wand2, Save, ArrowLeft, Scissors, ImagePlus, X, Upload, FileAudio, Music
 } from 'lucide-react';
+
+type InputMode = 'record' | 'upload';
 
 export default function CreateEpisode() {
   const router = useRouter();
   
+  // Mode toggle
+  const [inputMode, setInputMode] = useState<InputMode>('record');
+  
+  // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   
+  // Audio processing options
   const [useNoiseSuppression, setUseNoiseSuppression] = useState(true);
   const [useEchoCancellation, setUseEchoCancellation] = useState(true);
   
+  // Episode details
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -25,18 +34,25 @@ export default function CreateEpisode() {
   // Cover art state
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  
+  // Upload state
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       if (timerRef.current) clearInterval(timerRef.current);
+      if (coverPreview) URL.revokeObjectURL(coverPreview);
     };
-  }, [audioUrl]);
+  }, [audioUrl, coverPreview]);
 
+  // ========== RECORDING FUNCTIONS ==========
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -60,6 +76,7 @@ export default function CreateEpisode() {
         const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
         setAudioUrl(url);
+        setAudioDuration(recordingTime);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -84,11 +101,66 @@ export default function CreateEpisode() {
     }
   };
 
-  const discardRecording = () => {
+  // ========== UPLOAD FUNCTIONS ==========
+  const handleAudioUpload = async (file: File) => {
+    // Validate file type
+    const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/m4a', 'audio/mp4', 'audio/x-m4a'];
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|webm|ogg|m4a)$/i)) {
+      alert('Please upload a valid audio file (MP3, WAV, WebM, OGG, M4A)');
+      return;
+    }
+
+    // Validate file size (max 100MB)
+    if (file.size > 100 * 1024 * 1024) {
+      alert('File too large. Maximum size is 100MB.');
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    setAudioBlob(file);
+    setAudioUrl(url);
+    setUploadedFileName(file.name);
+    
+    // Get audio duration
+    const audio = new Audio(url);
+    audio.addEventListener('loadedmetadata', () => {
+      setAudioDuration(Math.floor(audio.duration));
+      setRecordingTime(Math.floor(audio.duration));
+    });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleAudioUpload(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleAudioUpload(file);
+  };
+
+  // ========== SHARED FUNCTIONS ==========
+  const discardAudio = () => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioBlob(null);
     setAudioUrl(null);
     setRecordingTime(0);
+    setAudioDuration(0);
+    setUploadedFileName(null);
   };
 
   const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,16 +184,31 @@ export default function CreateEpisode() {
     return mins + ':' + secs.toString().padStart(2, '0');
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) {
+      return (bytes / 1024).toFixed(1) + ' KB';
+    }
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
   const handleSave = async () => {
     if (!audioBlob || !title) {
-      alert("Please provide a title and recording");
+      alert("Please provide a title and audio");
       return;
     }
     setUploading(true);
 
     try {
+      // Determine file extension based on type
+      const isUploadedFile = audioBlob instanceof File;
+      let extension = 'webm';
+      if (isUploadedFile) {
+        const fileName = (audioBlob as File).name;
+        extension = fileName.split('.').pop() || 'webm';
+      }
+      
       // Upload audio file
-      const audioFilename = 'episode-' + Date.now() + '.webm';
+      const audioFilename = 'episode-' + Date.now() + '.' + extension;
       const { error: uploadError } = await supabase.storage
         .from('media')
         .upload('audio/' + audioFilename, audioBlob);
@@ -150,6 +237,7 @@ export default function CreateEpisode() {
         }
       }
 
+      // Create episode record
       const { data: episode, error: dbError } = await supabase
         .from('episodes')
         .insert({
@@ -157,17 +245,21 @@ export default function CreateEpisode() {
           summary,
           audio_url: audioPublicUrl,
           cover_image_url: coverImageUrl,
-          duration_seconds: recordingTime,
+          duration_seconds: audioDuration || recordingTime,
+          audio_file_size: audioBlob.size,
+          audio_format: extension,
           is_published: false,
           published_at: null,
+          transcription_status: 'processing',
         })
         .select()
         .single();
 
       if (dbError) throw dbError;
 
+      // Trigger transcription
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('audio', audioBlob, 'recording.' + extension);
       formData.append('episodeId', episode.id);
 
       const transcriptRes = await fetch('/api/transcribe', {
@@ -177,6 +269,11 @@ export default function CreateEpisode() {
 
       if (!transcriptRes.ok) {
         console.error('Transcription failed');
+        // Update status to failed
+        await supabase.from('episodes').update({ transcription_status: 'failed' }).eq('id', episode.id);
+      } else {
+        // Update status to completed
+        await supabase.from('episodes').update({ transcription_status: 'completed' }).eq('id', episode.id);
       }
 
       router.push('/admin/episodes/' + episode.id);
@@ -190,16 +287,19 @@ export default function CreateEpisode() {
   };
 
   const getTimerClasses = () => {
-    const base = 'aspect-square rounded-full flex flex-col items-center justify-center mb-8 border-4 transition-all duration-500';
+    const base = 'aspect-square rounded-full flex flex-col items-center justify-center mb-6 border-4 transition-all duration-500';
     if (isRecording) {
       return base + ' border-red-500 bg-red-50 shadow-[0_0_30px_rgba(239,68,68,0.3)]';
     }
-    return base + ' border-stone-100 bg-stone-50';
+    if (audioUrl) {
+      return base + ' border-green-500 bg-green-50';
+    }
+    return base + ' border-stone-200 bg-stone-50';
   };
 
   return (
     <div className="min-h-screen bg-stone-50 p-8 font-sans">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         
         <button 
           onClick={() => router.back()}
@@ -208,99 +308,204 @@ export default function CreateEpisode() {
           <ArrowLeft size={18} className="mr-2" /> Back to Command Center
         </button>
 
-        <h1 className="text-4xl font-serif font-bold text-stone-900 mb-2">Record New Episode</h1>
-        <p className="text-stone-500 mb-10">Step into the booth. We will handle the technical stuff.</p>
+        <h1 className="text-4xl font-serif font-bold text-stone-900 mb-2">Create New Episode</h1>
+        <p className="text-stone-500 mb-8">Record live or upload a pre-recorded episode.</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* ===== MODE TOGGLE TABS ===== */}
+        <div className="flex gap-2 mb-8 bg-stone-200 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => { setInputMode('record'); discardAudio(); }}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
+              inputMode === 'record' 
+                ? 'bg-white text-stone-900 shadow-md' 
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Mic size={18} />
+            Record Live
+          </button>
+          <button
+            onClick={() => { setInputMode('upload'); discardAudio(); }}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
+              inputMode === 'upload' 
+                ? 'bg-white text-stone-900 shadow-md' 
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Upload size={18} />
+            Upload Audio
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
+          {/* ===== LEFT COLUMN: AUDIO INPUT ===== */}
           <div className="bg-white p-6 rounded-2xl shadow-xl border border-stone-200">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-bold text-stone-700 flex items-center gap-2">
-                <Mic size={20} /> The Booth
-              </h2>
-              {isRecording && (
-                <span className="flex items-center gap-2 text-red-600 font-mono text-sm animate-pulse">
-                  <span className="w-2 h-2 bg-red-600 rounded-full"></span>
-                  ON AIR
-                </span>
-              )}
-            </div>
+            
+            {inputMode === 'record' ? (
+              <>
+                {/* RECORD MODE */}
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-bold text-stone-700 flex items-center gap-2">
+                    <Mic size={20} /> The Booth
+                  </h2>
+                  {isRecording && (
+                    <span className="flex items-center gap-2 text-red-600 font-mono text-sm animate-pulse">
+                      <span className="w-2 h-2 bg-red-600 rounded-full"></span>
+                      ON AIR
+                    </span>
+                  )}
+                </div>
 
-            <div className={getTimerClasses()}>
-              <div className="text-5xl font-mono font-bold text-stone-800 tracking-tighter">
-                {formatTime(recordingTime)}
-              </div>
-              <p className="text-xs text-stone-400 mt-2 uppercase tracking-widest font-semibold">
-                {isRecording ? 'Recording...' : audioUrl ? 'Recorded' : 'Ready'}
-              </p>
-            </div>
+                <div className="max-w-[200px] mx-auto">
+                  <div className={getTimerClasses()}>
+                    <div className="text-4xl font-mono font-bold text-stone-800 tracking-tighter">
+                      {formatTime(recordingTime)}
+                    </div>
+                    <p className="text-xs text-stone-400 mt-2 uppercase tracking-widest font-semibold">
+                      {isRecording ? 'Recording...' : audioUrl ? 'Recorded' : 'Ready'}
+                    </p>
+                  </div>
+                </div>
 
-            <div className="flex justify-center gap-4 mb-8">
-              {!isRecording && !audioUrl && (
-                <button
-                  onClick={startRecording}
-                  className="flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-full font-semibold hover:bg-red-600 transition-all shadow-lg hover:shadow-red-200"
-                >
-                  <Mic size={20} />
-                  Start Recording
-                </button>
-              )}
+                <div className="flex justify-center gap-4 mb-6">
+                  {!isRecording && !audioUrl && (
+                    <button
+                      onClick={startRecording}
+                      className="flex items-center gap-2 bg-red-500 text-white px-6 py-3 rounded-full font-semibold hover:bg-red-600 transition-all shadow-lg hover:shadow-red-200"
+                    >
+                      <Mic size={20} />
+                      Start Recording
+                    </button>
+                  )}
 
-              {isRecording && (
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center gap-2 bg-stone-800 text-white px-6 py-3 rounded-full font-semibold hover:bg-stone-900 transition-all"
-                >
-                  <Square size={20} />
-                  Stop Recording
-                </button>
-              )}
+                  {isRecording && (
+                    <button
+                      onClick={stopRecording}
+                      className="flex items-center gap-2 bg-stone-800 text-white px-6 py-3 rounded-full font-semibold hover:bg-stone-900 transition-all"
+                    >
+                      <Square size={20} />
+                      Stop Recording
+                    </button>
+                  )}
 
-              {audioUrl && !isRecording && (
-                <button
-                  onClick={discardRecording}
-                  className="flex items-center gap-2 text-stone-500 hover:text-red-500 transition-colors"
-                >
-                  <Scissors size={18} />
-                  Discard and Re-record
-                </button>
-              )}
-            </div>
+                  {audioUrl && !isRecording && (
+                    <button
+                      onClick={discardAudio}
+                      className="flex items-center gap-2 text-stone-500 hover:text-red-500 transition-colors"
+                    >
+                      <Scissors size={18} />
+                      Discard & Re-record
+                    </button>
+                  )}
+                </div>
 
+                {/* Audio Processing Options */}
+                <div className="border-t border-stone-100 pt-6">
+                  <p className="text-xs text-stone-500 uppercase font-semibold mb-4 flex items-center gap-2">
+                    <Wand2 size={14} /> Audio Enhancement
+                  </p>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 text-sm text-stone-600 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={useNoiseSuppression} 
+                        onChange={(e) => setUseNoiseSuppression(e.target.checked)}
+                        className="accent-orange-500 w-4 h-4"
+                      />
+                      Reduce Background Noise
+                    </label>
+                    <label className="flex items-center gap-3 text-sm text-stone-600 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={useEchoCancellation} 
+                        onChange={(e) => setUseEchoCancellation(e.target.checked)}
+                        className="accent-orange-500 w-4 h-4"
+                      />
+                      Remove Echo
+                    </label>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* UPLOAD MODE */}
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-bold text-stone-700 flex items-center gap-2">
+                    <Upload size={20} /> Upload Audio File
+                  </h2>
+                </div>
+
+                {!audioUrl ? (
+                  <div
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
+                      dragActive 
+                        ? 'border-orange-500 bg-orange-50' 
+                        : 'border-stone-300 hover:border-orange-400 hover:bg-stone-50'
+                    }`}
+                  >
+                    <FileAudio size={48} className={`mx-auto mb-4 ${dragActive ? 'text-orange-500' : 'text-stone-400'}`} />
+                    <p className="text-stone-700 font-medium mb-2">
+                      {dragActive ? 'Drop your audio file here' : 'Drag & drop your audio file'}
+                    </p>
+                    <p className="text-stone-500 text-sm mb-4">or click to browse</p>
+                    <p className="text-xs text-stone-400">
+                      Supports MP3, WAV, WebM, OGG, M4A • Max 100MB
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="audio/*,.mp3,.wav,.webm,.ogg,.m4a"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* File Info Card */}
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Music size={24} className="text-green-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-stone-900 truncate">{uploadedFileName}</p>
+                          <p className="text-sm text-stone-500">
+                            {formatTime(audioDuration)} • {formatFileSize(audioBlob?.size || 0)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={discardAudio}
+                          className="text-stone-400 hover:text-red-500 p-1"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-green-600 font-medium text-center">
+                      ✓ Audio file ready for processing
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Audio Preview - shared between modes */}
             {audioUrl && (
-              <div className="border-t border-stone-100 pt-6">
-                <p className="text-xs text-stone-500 uppercase font-semibold mb-2">Preview</p>
+              <div className="border-t border-stone-100 pt-6 mt-6">
+                <p className="text-xs text-stone-500 uppercase font-semibold mb-3">Preview</p>
                 <audio controls src={audioUrl} className="w-full" />
               </div>
             )}
-
-            <div className="border-t border-stone-100 pt-6 mt-6">
-              <p className="text-xs text-stone-500 uppercase font-semibold mb-4 flex items-center gap-2">
-                <Wand2 size={14} /> Freshen Up My Audio
-              </p>
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 text-sm text-stone-600 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={useNoiseSuppression} 
-                    onChange={(e) => setUseNoiseSuppression(e.target.checked)}
-                    className="accent-orange-500 w-4 h-4"
-                  />
-                  Reduce Background Noise
-                </label>
-                <label className="flex items-center gap-3 text-sm text-stone-600 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={useEchoCancellation} 
-                    onChange={(e) => setUseEchoCancellation(e.target.checked)}
-                    className="accent-orange-500 w-4 h-4"
-                  />
-                  Remove Echo
-                </label>
-              </div>
-            </div>
           </div>
 
+          {/* ===== RIGHT COLUMN: EPISODE DETAILS ===== */}
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-xl border border-stone-200">
               <h2 className="font-bold text-stone-700 mb-4">Episode Details</h2>
@@ -327,7 +532,7 @@ export default function CreateEpisode() {
                     value={summary}
                     onChange={(e) => setSummary(e.target.value)}
                     placeholder="A quick teaser for your listeners..."
-                    rows={4}
+                    rows={3}
                     className="w-full p-3 border border-stone-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none transition-all"
                   />
                 </div>
@@ -359,7 +564,7 @@ export default function CreateEpisode() {
                   ) : (
                     <label className="flex flex-col items-center justify-center w-full aspect-video border-2 border-dashed border-stone-300 rounded-xl cursor-pointer hover:border-orange-500 hover:bg-orange-50/50 transition-all group">
                       <ImagePlus size={32} className="text-stone-400 group-hover:text-orange-500 mb-2" />
-                      <span className="text-sm text-stone-500 group-hover:text-orange-600">Click to upload cover image</span>
+                      <span className="text-sm text-stone-500 group-hover:text-orange-600">Click to upload cover</span>
                       <span className="text-xs text-stone-400 mt-1">PNG, JPG up to 5MB</span>
                       <input
                         type="file"
@@ -373,6 +578,7 @@ export default function CreateEpisode() {
               </div>
             </div>
 
+            {/* Save Button */}
             <button
               onClick={handleSave}
               disabled={uploading || !audioBlob || !title}
@@ -380,16 +586,16 @@ export default function CreateEpisode() {
             >
               {uploading ? (
                 <>
-                  <span className="animate-spin">⏳</span> Generating Transcript...
+                  <span className="animate-spin">⏳</span> Processing & Transcribing...
                 </>
               ) : (
                 <>
-                  <Save size={20} /> Save and Generate Transcript
+                  <Save size={20} /> Save & Generate Transcript
                 </>
               )}
             </button>
             <p className="text-center text-xs text-stone-400">
-              We will transcribe your audio and take you to the editor to add links.
+              We'll transcribe your audio with AI and take you to the editor.
             </p>
           </div>
 
