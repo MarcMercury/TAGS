@@ -89,13 +89,26 @@ export default function AdminDashboard() {
     setTranscribing(episode.id);
 
     try {
-      // Fetch the audio file
-      const response = await fetch(episode.audio_url);
+      // First, delete any existing transcript nodes for this episode
+      await supabase
+        .from('transcript_nodes')
+        .delete()
+        .eq('episode_id', episode.id);
+
+      // Fetch the audio file with CORS mode
+      const response = await fetch(episode.audio_url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error('Failed to fetch audio file: ' + response.statusText);
+      }
       const audioBlob = await response.blob();
+
+      // Determine file extension from episode data or URL
+      const extension = episode.audio_format || episode.audio_url.split('.').pop()?.split('?')[0] || 'webm';
+      const filename = 'audio.' + extension;
 
       // Send to transcription API
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'audio.webm');
+      formData.append('audio', audioBlob, filename);
       formData.append('episodeId', episode.id);
 
       const transcriptRes = await fetch('/api/transcribe', {
@@ -103,14 +116,19 @@ export default function AdminDashboard() {
         body: formData,
       });
 
+      const result = await transcriptRes.json();
+
       if (!transcriptRes.ok) {
-        throw new Error('Transcription failed');
+        throw new Error(result.error || 'Transcription failed');
       }
 
-      const result = await transcriptRes.json();
       alert('Transcript generated! ' + result.nodeCount + ' segments created.');
       
+      // Refresh episodes to show updated status
+      fetchEpisodes();
+      
     } catch (error: any) {
+      console.error('Transcription error:', error);
       alert('Error generating transcript: ' + error.message);
     } finally {
       setTranscribing(null);

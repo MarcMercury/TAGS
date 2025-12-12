@@ -259,20 +259,43 @@ export default function CreateEpisode() {
 
       // Trigger transcription
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.' + extension);
+      
+      // Create a proper File object with the correct MIME type
+      const mimeTypes: Record<string, string> = {
+        'webm': 'audio/webm',
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+        'ogg': 'audio/ogg',
+        'm4a': 'audio/mp4',
+        'mp4': 'audio/mp4',
+      };
+      const mimeType = mimeTypes[extension] || 'audio/webm';
+      const audioFile = new File([audioBlob], 'recording.' + extension, { type: mimeType });
+      
+      formData.append('audio', audioFile);
       formData.append('episodeId', episode.id);
+
+      console.log('[CreateEpisode] Sending transcription request...', {
+        fileName: audioFile.name,
+        fileType: audioFile.type,
+        fileSize: audioFile.size,
+        episodeId: episode.id
+      });
 
       const transcriptRes = await fetch('/api/transcribe', {
         method: 'POST',
         body: formData,
       });
 
+      const transcriptResult = await transcriptRes.json();
+      
       if (!transcriptRes.ok) {
-        console.error('Transcription failed');
+        console.error('[CreateEpisode] Transcription failed:', transcriptResult.error);
         // Update status to failed
         await supabase.from('episodes').update({ transcription_status: 'failed' }).eq('id', episode.id);
       } else {
-        // Update status to completed
+        console.log('[CreateEpisode] Transcription succeeded:', transcriptResult.nodeCount, 'nodes');
+        // Update status to completed (already done in API, but double-check)
         await supabase.from('episodes').update({ transcription_status: 'completed' }).eq('id', episode.id);
       }
 
